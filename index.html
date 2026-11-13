@@ -350,6 +350,10 @@ body.is-fs .slot { width: 34px; height: 34px; }
   .topbar .ttl small { display: none; }
   .topbar .slots { margin-right: auto; }
   .sheet .story { font-size: 18px; }
+  .tip { left: 10px; right: 10px; bottom: 10px; transform: none; max-width: none; padding: 6px 14px; font-size: 15px; white-space: normal; text-align: center; border-radius: 16px; }
+  .zy-on .tip { font-size: 16px; line-height: 2; }
+  .topbar .tools { gap: 6px; } .topbar .tools .btn.small { padding: 0 9px; font-size: 15px; min-height: 40px; }
+  .deduce { right: 50%; transform: translateX(50%); animation: none; }
   .zy-on .q { font-size: 21px; } .zy-on .sheet .story, .zy-on .scene-box { font-size: 19px; }
 }
 </style>
@@ -2278,9 +2282,13 @@ const Scene = (() => {
     if (!cs) return;
     const [, , bw, bh] = cs.room.box, pad = Math.min(W, H) < 500 ? 0.99 : 0.96;
     const s = Math.min(W * pad / bw, H * pad / bh);
-    B = { s, w: bw * s, h: bh * s, x: (W - bw * s) / 2, y: (H - bh * s) / 2 };
+    // 手機直立時，底下留位置給提示字框，房間往上移（放得下才移，不縮小房間）
+    const avail = H - reserve, y = bh * s <= avail ? (avail - bh * s) / 2 : (H - bh * s) / 2;
+    B = { s, w: bw * s, h: bh * s, x: (W - bw * s) / 2, y };
   }
   function setScene(c) { cs = c; layout(); }
+  let reserve = 0;
+  function setReserve(px) { if (px !== reserve) { reserve = px; layout(); } }
   const S = ([x, y]) => [B.x + (x - cs.room.box[0]) * B.s, B.y + (y - cs.room.box[1]) * B.s];
   const C = (sx, sy) => [(sx - B.x) / B.s + cs.room.box[0], (sy - B.y) / B.s + cs.room.box[1]];
 
@@ -2376,7 +2384,7 @@ const Scene = (() => {
     return best;
   }
   function floorAt(sx, sy) { const p = C(sx, sy); return inside(p, cs.room.walk) ? p : null; }
-  return { setup, resize, setScene, render, hit, floorAt, clampWalk, SUBJ, marks: () => marks };
+  return { setup, resize, setScene, setReserve, render, hit, floorAt, clampWalk, SUBJ, marks: () => marks };
 })();
 // ===== 劇情對白：偵探 Armstrong（A）、搭檔 Hanson（H）、委託人（C）=====
 // 每句：[說話的人, 台詞, 表情]；Armstrong：normal happy think surprise confident found；Hanson：happy think surprise serious
@@ -3774,12 +3782,22 @@ function updateHUD() {
   $('#deduceBtn').hidden = !(n === 3 && !p.solved);
   $('#deduceBtn').innerHTML = Z('指認犯人！');
   $('#tip').innerHTML = Z(p.solved ? '案件破了！回首頁挑戰下一個案件吧。' : n === 3 ? '線索都找齊了！按「指認犯人」破案吧！' : n ? `已經找到 ${n} 條線索，還差 ${3 - n} 條。也別忘了到處搜查喔！` : `點放大鏡搜查現場，點「${[...new Set(cur.levels.map(l => Scene.SUBJ[l.subj].ch))].join('／')}」解開暗號！`);
+  fitTip();
+}
+// 手機：提示字框放最底下全寬，「指認犯人」按鈕放在字框上面，房間往上讓位
+function fitTip() {
+  const tip = $('#tip'), btn = $('#deduceBtn'); if (!tip) return;
+  if (innerWidth > 560) { btn.style.bottom = ''; Scene.setReserve(0); return; }
+  const th = tip.offsetHeight + 14;
+  btn.style.bottom = (th + 10) + 'px';
+  Scene.setReserve(th + 10 + (btn.hidden ? 0 : btn.offsetHeight + 10));
 }
 
 // ---------- 場景互動與動畫 ----------
 const cv = $('#scene');
 Scene.setup(cv);
-window.addEventListener('resize', () => Scene.resize());
+window.addEventListener('resize', () => { fitTip(); Scene.resize(); });
+if (window.ResizeObserver) new ResizeObserver(() => fitTip()).observe($('#tip'));
 if (window.ResizeObserver) new ResizeObserver(() => Scene.resize()).observe(cv);
 function walkTo(p, cb) {
   const [x, y] = Scene.clampWalk(p);
